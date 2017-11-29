@@ -329,18 +329,19 @@ class MessageNotificationsController(implicit inj: Injector, cxt: Context, event
       title.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
-    val body = if (n.isEphemeral) "" else getMessage(n, multiple = false, singleConversationInBatch = true, singleUserInBatch = true)
+    val body = getMessage(n, multiple = false, singleConversationInBatch = true, singleUserInBatch = true)
     val requestBase = System.currentTimeMillis.toInt
 
     val bigTextStyle = new NotificationCompat.BigTextStyle
     bigTextStyle.setBigContentTitle(title)
-    bigTextStyle.bigText(body)
+    if (!n.isEphemeral) bigTextStyle.bigText(body)
     teamName.foreach(bigTextStyle.setSummaryText)
 
     val builder = commonBuilder(accountId, title, n.time, bigTextStyle, silent)
-      .setContentText(body)
       .setContentIntent(OpenConvIntent(accountId, n.convId, requestBase))
       .setDeleteIntent(NotificationsAndroidService.clearNotificationsIntent(accountId, n.convId, context))
+
+    if (!n.isEphemeral) builder.setContentText(body)
 
     if (n.tpe != NotificationType.CONNECT_REQUEST) {
       builder.addAction(R.drawable.ic_action_call, getString(R.string.notification__action__call), CallIntent(accountId, n.convId, requestBase + 1))
@@ -349,7 +350,7 @@ class MessageNotificationsController(implicit inj: Injector, cxt: Context, event
 
     attachNotificationSoundAndLed(builder, Seq(n), silent)
 
-    if (!n.isEphemeral) pic.foreach(builder.setLargeIcon(_))
+    pic.foreach(builder.setLargeIcon(_))
 
     builder
       .setOnlyAlertOnce(noTicker)
@@ -411,7 +412,7 @@ class MessageNotificationsController(implicit inj: Injector, cxt: Context, event
     messages.foreach(inboxStyle.addLine)
 
     attachNotificationSoundAndLed(builder, ns, silent)
-    if (!isEphemeral) pic.foreach(builder.setLargeIcon(_))
+    pic.foreach(builder.setLargeIcon(_))
     builder
       .setOnlyAlertOnce(noTicker)
       .setGroup(accountId.str)
@@ -471,9 +472,7 @@ class MessageNotificationsController(implicit inj: Injector, cxt: Context, event
       R.string.notification__message__name__prefix__text
     } else 0
 
-    val userName = if (n.isEphemeral) None else n.userName
-
-    getStringOrEmpty(prefixId, userName.getOrElse(""), n.convName.filterNot(_.isEmpty).getOrElse(getString(R.string.notification__message__group__default_conversation_name)))
+    if (n.isEphemeral) "" else getStringOrEmpty(prefixId, n.userName.getOrElse(""), n.convName.filterNot(_.isEmpty).getOrElse(getString(R.string.notification__message__group__default_conversation_name)))
   }
 
   def addQuickReplyAction(builder: NotificationCompat.Builder, accountId: AccountId, convId: ConvId, requestCode: Int): Unit = {
