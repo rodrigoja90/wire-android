@@ -40,7 +40,6 @@ import com.waz.model._
 import com.waz.service.{SearchState, ZMessaging}
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
-import com.waz.utils.returning
 import com.waz.zclient.common.controllers.global.AccentColorController
 import com.waz.zclient.common.controllers.{SearchUserController, ThemeController, UserAccountsController}
 import com.waz.zclient.common.views.{ChatheadWithTextFooter, FlatWireButton, PickableElement}
@@ -62,12 +61,11 @@ import com.waz.zclient.ui.theme.ThemeUtils
 import com.waz.zclient.ui.utils.KeyboardUtils
 import com.waz.zclient.usersearch.adapters.PickUsersAdapter
 import com.waz.zclient.usersearch.views.{ContactRowView, SearchBoxView, SearchEditText, UserRowView}
-import com.waz.zclient.utils.device.DeviceDetector
-import com.waz.zclient.utils.{IntentUtils, LayoutSpec, PermissionUtils, StringUtils, UiStorage, UserSignal}
 import com.waz.zclient.utils.ContextUtils._
+import com.waz.zclient.utils.device.DeviceDetector
+import com.waz.zclient.utils.{IntentUtils, LayoutSpec, PermissionUtils, StringUtils, UiStorage, UserSignal, ViewUtils}
 import com.waz.zclient.views._
 import com.waz.zclient.{BaseActivity, FragmentHelper, OnBackPressedListener, R}
-import com.waz.zclient.utils.ViewUtils
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -98,9 +96,9 @@ object PickUserFragment {
   }
 
   trait Container {
-    def showIncomingPendingConnectRequest(conversation: IConversation): Unit
+    def showIncomingPendingConnectRequest(conv: ConvId): Unit
 
-    def onSelectedUsers(users: java.util.List[User], requester: ConversationChangeRequester): Unit
+    def onSelectedUsers(users: java.util.List[UserId], requester: ConversationChangeRequester): Unit
 
     def getLoadingViewIndicator: LoadingIndicatorView
 
@@ -172,8 +170,6 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
         setConversationQuickMenuVisible(false)
       }
     }
-
-    override def onKeyboardDoneAction(): Unit = getControllerFactory.getPickUserController.notifyKeyboardDoneAction()
 
     override def onFocusChange(hasFocus: Boolean): Unit = setFocusByCurrentPickerDestination()
 
@@ -447,7 +443,7 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
 
   private def createAndOpenConversation(users: Seq[UserId], requester: ConversationChangeRequester): Unit = {
     userAccountsController.createAndOpenConversation(users.toArray, requester, getActivity.asInstanceOf[BaseActivity])
-    getControllerFactory.getPickUserController.hidePickUser(getCurrentPickerDestination, true)
+    getControllerFactory.getPickUserController.hidePickUser(getCurrentPickerDestination)
   }
 
   override def onConversationButtonClicked(): Unit = {
@@ -490,14 +486,12 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
 
   def onKeyboardDoneAction(): Unit = {
     lastInputIsKeyboardDoneAction = true
-    val users = getSelectedUsersJava
-    var minUsers: Int = 1
-    if (isAddingToConversation && !getArguments.getBoolean(PickUserFragment.ARGUMENT_GROUP_CONVERSATION)) {
-      minUsers = 2
-    }
+    val users = searchUserController.selectedUsers
+    val minUsers =
+    if (isAddingToConversation && !getArguments.getBoolean(PickUserFragment.ARGUMENT_GROUP_CONVERSATION)) 2 else 1
     if (users.size >= minUsers) {
       KeyboardUtils.hideKeyboard(getActivity)
-      getContainer.onSelectedUsers(users, ConversationChangeRequester.START_CONVERSATION)
+      getContainer.onSelectedUsers(users.toSeq.asJava, ConversationChangeRequester.START_CONVERSATION)
     }
     if (searchResultRecyclerView != null && searchResultRecyclerView.getVisibility != View.VISIBLE && errorMessageViewContainer.getVisibility != View.VISIBLE) {
       showErrorMessage()
@@ -662,8 +656,6 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
     }
   }
 
-  override def getDestination: Int = if(isAddingToConversation) IPickUserController.CONVERSATION else IPickUserController.STARTUI
-
   private def showErrorMessage(): Unit = {
     errorMessageViewContainer.setVisibility(View.VISIBLE)
     // Set isClickable as ListView continues to receive click events with GONE visibility
@@ -697,7 +689,7 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
         if (isAddingToConversation) {
           val users: java.util.ArrayList[User] = new java.util.ArrayList[User]
           users.add(user)
-          getContainer.onSelectedUsers(users, ConversationChangeRequester.START_CONVERSATION)
+          getContainer.onSelectedUsers(Seq(new UserId(user.getId)).asJava, ConversationChangeRequester.START_CONVERSATION)
         } else {
           val conversation: IConversation = user.getConversation
           if (conversation != null) {
@@ -713,10 +705,10 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
            ConnectionStatus.Unconnected =>
         KeyboardUtils.hideKeyboard(getActivity)
         getControllerFactory.getConversationScreenController.setPopoverLaunchedMode(DialogLaunchMode.SEARCH)
-        getControllerFactory.getPickUserController.showUserProfile(user, anchorView)
+        getControllerFactory.getPickUserController.showUserProfile(new UserId(user.getId), anchorView)
       case ConnectionStatus.PendingFromOther =>
         KeyboardUtils.hideKeyboard(getActivity)
-        getContainer.showIncomingPendingConnectRequest(user.getConversation)
+        getContainer.showIncomingPendingConnectRequest(new ConvId(user.getConversation.getId))
       case _ =>
     }
   }
@@ -745,8 +737,8 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
     view.getId match {
       case R.id.confirmation_button =>
         KeyboardUtils.hideKeyboard(getActivity)
-        val users = if (getArguments.getBoolean(PickUserFragment.ARGUMENT_GROUP_CONVERSATION)) getSelectedUsersJava else getSelectedAndExcludedUsersJava
-        getContainer.onSelectedUsers(users, ConversationChangeRequester.START_CONVERSATION)
+        val users = if (getArguments.getBoolean(PickUserFragment.ARGUMENT_GROUP_CONVERSATION)) searchUserController.selectedUsers else getSelectedAndExcluded
+        getContainer.onSelectedUsers(users.toSeq.asJava, ConversationChangeRequester.START_CONVERSATION)
       case R.id.invite_button =>
         sendGenericInvite(false)
       case R.id.ll_pickuser__error_invite =>
@@ -776,7 +768,7 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
   private def closeStartUI(): Unit = {
     KeyboardUtils.hideKeyboard(getActivity)
     searchUserController.setFilter("")
-    getControllerFactory.getPickUserController.hidePickUser(getCurrentPickerDestination, true)
+    getControllerFactory.getPickUserController.hidePickUser(getCurrentPickerDestination)
   }
 
   override def onRequestPermissionsResult(requestCode: Int, grantResults: Array[Int]): Unit = {
@@ -800,10 +792,6 @@ class PickUserFragment extends BaseFragment[PickUserFragment.Container]
 
   private def getSelectedUsersJava: java.util.List[User] = {
     searchUserController.selectedUsers.map(uid => getStoreFactory.pickUserStore.getUser(uid.str)).toList.asJava
-  }
-
-  private def getSelectedAndExcludedUsersJava: java.util.List[User] = {
-    getSelectedAndExcluded.map(uid => getStoreFactory.pickUserStore.getUser(uid.str)).toList.asJava
   }
 
   // XXX Only show contact sharing dialogs for PERSONAL START UI

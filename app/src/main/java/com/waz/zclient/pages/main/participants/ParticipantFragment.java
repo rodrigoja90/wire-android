@@ -549,7 +549,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
 
 
     @Override
-    public void onConversationUpdated(IConversation conversation) { }
+    public void onConversationUpdated(ConvId conversation) { }
 
     //////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -583,7 +583,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
         }
 
         if (getControllerFactory().getPickUserController().isShowingPickUser(getCurrentPickerDestination())) {
-            getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination(), true);
+            getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination());
             return true;
         }
 
@@ -630,9 +630,6 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     @Override
     public void onScrollParticipantsList(int verticalOffset, boolean scrolledToBottom) { }
 
-    @Override
-    public void onConversationLoaded() { }
-
     private void onConversationLoaded(final ConvId convId) {
         if (convId == null) {
             return;
@@ -660,7 +657,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
 
     @Override
     public void onAddPeopleToConversation() {
-        getControllerFactory().getPickUserController().showPickUser(IPickUserController.Destination.PARTICIPANTS, null);
+        getControllerFactory().getPickUserController().showPickUser(IPickUserController.Destination.PARTICIPANTS);
     }
 
 
@@ -946,10 +943,10 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     //////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
-    public void onAcceptedConnectRequest(final IConversation conversation) {
+    public void onAcceptedConnectRequest(final ConvId conversation) {
         getControllerFactory().getConversationScreenController().hideUser();
-        Timber.i("onAcceptedConnectRequest %s", conversation.getId());
-        convController.selectConv(new ConvId(conversation.getId()), ConversationChangeRequester.START_CONVERSATION);
+        Timber.i("onAcceptedConnectRequest %s", conversation);
+        convController.selectConv(conversation, ConversationChangeRequester.START_CONVERSATION);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -959,10 +956,10 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     //////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
-    public void onUnblockedUser(IConversation restoredConversationWithUser) {
+    public void onUnblockedUser(ConvId restoredConversationWithUser) {
         getControllerFactory().getConversationScreenController().hideUser();
-        Timber.i("onUnblockedUser %s", restoredConversationWithUser.getId());
-        convController.selectConv(new ConvId(restoredConversationWithUser.getId()), ConversationChangeRequester.START_CONVERSATION);
+        Timber.i("onUnblockedUser %s", restoredConversationWithUser);
+        convController.selectConv(restoredConversationWithUser, ConversationChangeRequester.START_CONVERSATION);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -977,7 +974,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     }
 
     @Override
-    public void showIncomingPendingConnectRequest(IConversation conversation) { }
+    public void showIncomingPendingConnectRequest(ConvId conv) { }
 
     //////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -986,17 +983,12 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     //////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
-    public void onSelectedUsers(final List<User> users, final ConversationChangeRequester requester) {
-        final List<UserId> userIds = new ArrayList<>(users.size());
-        for(User user: users) {
-            userIds.add(new UserId(user.getId()));
-        }
-
+    public void onSelectedUsers(final List<UserId> userIds, final ConversationChangeRequester requester) {
         convController.withCurrentConv(new Callback<ConversationData>() {
             @Override
             public void callback(ConversationData conv) {
                 if (conv.convType() == IConversation.Type.ONE_TO_ONE) {
-                    getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination(), false);
+                    getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination());
                     dismissDialog();
                     convController.createGroupConversation(userIds, requester);
                     if (!getStoreFactory().networkStore().hasInternetConnection()) {
@@ -1008,7 +1000,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
                     }
                 } else if (conv.convType() == IConversation.Type.GROUP) {
                     convController.addMembers(conv.id(), userIds);
-                    getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination(), false);
+                    getControllerFactory().getPickUserController().hidePickUser(getCurrentPickerDestination());
                     if (!getStoreFactory().networkStore().hasInternetConnection()) {
                         ViewUtils.showAlertDialog(getActivity(),
                             R.string.conversation__add_user__no_network__title,
@@ -1039,12 +1031,12 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     //////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
-    public void onShowPickUser(IPickUserController.Destination destination, View anchorView) {
+    public void onShowPickUser(IPickUserController.Destination destination) {
         if (LayoutSpec.isPhone(getActivity())) {
             return;
         }
         if (!getCurrentPickerDestination().equals(destination)) {
-            onHidePickUser(getCurrentPickerDestination(), true);
+            onHidePickUser(getCurrentPickerDestination());
             return;
         }
         FragmentManager fragmentManager = getChildFragmentManager();
@@ -1052,9 +1044,6 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
         int pickUserAnimation =
             LayoutSpec.isTablet(getActivity()) ? R.anim.fade_in : R.anim.slide_in_from_bottom_pick_user;
 
-        if (!groupConversation && otherUser != null) {
-            getControllerFactory().getPickUserController().addUser(otherUser);
-        }
         fragmentManager
             .beginTransaction()
             .setCustomAnimations(pickUserAnimation, R.anim.fade_out)
@@ -1084,8 +1073,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     }
 
     @Override
-    public void onHidePickUser(IPickUserController.Destination destination,
-                               boolean closeWithoutSelectingPeople) {
+    public void onHidePickUser(IPickUserController.Destination destination) {
         if (LayoutSpec.isPhone(getActivity())) {
             return;
         }
@@ -1159,7 +1147,7 @@ public class ParticipantFragment extends BaseFragment<ParticipantFragment.Contai
     }
 
     @Override
-    public void onShowUserProfile(User user, View anchorView) { }
+    public void onShowUserProfile(UserId userId, View anchorView) { }
 
     @Override
     public void onHideUserProfile() { }

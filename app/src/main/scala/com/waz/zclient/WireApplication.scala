@@ -64,6 +64,7 @@ import com.waz.zclient.utils.{BackStackNavigator, BackendPicker, Callback, UiSto
 import com.waz.zclient.views.DraftMap
 import net.hockeyapp.android.Constants
 import com.waz.zclient.common.views.ImageController
+import com.waz.zclient.controllers.confirmation.IConfirmationController
 
 object WireApplication {
   var APP_INSTANCE: WireApplication = _
@@ -99,6 +100,7 @@ object WireApplication {
     bind [ILocationController]           toProvider controllerFactory.getLocationController
     bind [IGiphyController]              toProvider controllerFactory.getGiphyController
     bind [ICameraController]             toProvider controllerFactory.getCameraController
+    bind [IConfirmationController]       toProvider controllerFactory.getConfirmationController
 
     bind [IStoreFactory]                 toProvider storeFactory
     bind [INetworkStore]                 toProvider storeFactory.networkStore
