@@ -17,41 +17,40 @@
  */
 package com.waz.zclient.appentry.fragments
 
-import android.content.DialogInterface
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View.OnClickListener
 import android.view.{LayoutInflater, View, ViewGroup}
 import com.waz.ZLog
-import com.waz.ZLog.ImplicitTag._
-import com.waz.service.ZMessaging
-import com.waz.threading.Threading
-import com.waz.zclient.appentry.EntryError
 import com.waz.zclient.appentry.controllers.SignInController
+import com.waz.zclient.appentry.fragments.AddEmailFragment._
 import com.waz.zclient.newreg.views.PhoneConfirmationButton
-import com.waz.zclient.newreg.views.PhoneConfirmationButton.State._
+import com.waz.zclient.newreg.views.PhoneConfirmationButton.State.{CONFIRM, NONE}
 import com.waz.zclient.pages.BaseFragment
 import com.waz.zclient.pages.main.profile.views.GuidedEditText
-import com.waz.zclient.utils.{ViewUtils, _}
-import com.waz.zclient.{FragmentHelper, OnBackPressedListener, R}
-import InsertPasswordFragment._
-import com.waz.zclient.appentry.controllers.SignInController._
+import com.waz.zclient.utils._
+import com.waz.zclient.{FragmentHelper, R}
+import com.waz.ZLog.ImplicitTag._
+import com.waz.threading.Threading
+import com.waz.zclient.appentry.EntryError
+import com.waz.zclient.appentry.controllers.SignInController.{Email, Register, SignInMethod}
 
-class InsertPasswordFragment extends BaseFragment[Container] with FragmentHelper with View.OnClickListener with OnBackPressedListener {
+class AddEmailFragment extends BaseFragment[Container] with FragmentHelper with OnClickListener {
 
   lazy val signInController = inject[SignInController]
 
   lazy val confirmationButton = Option(findById[PhoneConfirmationButton](R.id.confirmation_button))
 
-  override def onCreateView(inflater: LayoutInflater, container: ViewGroup, savedInstanceState: Bundle) =
-    inflater.inflate(R.layout.insert_password_fragment, container, false)
+  override def onCreateView(inflater: LayoutInflater, container: ViewGroup, savedInstanceState: Bundle): View =
+    inflater.inflate(R.layout.add_email_fragment, container, false)
 
   override def onViewCreated(view: View, savedInstanceState: Bundle) = {
+    signInController.uiSignInState ! SignInMethod(Register, Email)
 
     Option(findById[GuidedEditText](getView, R.id.email_field)).foreach { field =>
       field.setValidator(signInController.emailValidator)
       field.setResource(R.layout.guided_edit_text_sign_in__email)
-      signInController.email { field.setText }
-      field.setEditable(false)
+      field.getEditText.addTextListener(signInController.email ! _)
     }
 
     Option(findById[GuidedEditText](getView, R.id.password_field)).foreach { field =>
@@ -67,7 +66,7 @@ class InsertPasswordFragment extends BaseFragment[Container] with FragmentHelper
     }
 
     setConfirmationButtonActive(signInController.isValid.currentValue.getOrElse(false))
-    signInController.isValid.onUi { setConfirmationButtonActive }
+    signInController.isAddEmailValid.onUi { setConfirmationButtonActive }
     Option(findById[View](R.id.cancel_button)).foreach(_.setOnClickListener(this))
     Option(findById[View](R.id.ttv_signin_forgot_password)).foreach(_.setOnClickListener(this))
   }
@@ -75,38 +74,21 @@ class InsertPasswordFragment extends BaseFragment[Container] with FragmentHelper
   private def setConfirmationButtonActive(active: Boolean): Unit =
     confirmationButton.foreach(_.setState(if(active) CONFIRM else NONE))
 
-  override def onClick(v: View) = {
-    v.getId match {
-      case R.id.cancel_button =>
-        onBackPressed()
-      case R.id.confirmation_button =>
-        getContainer.enableProgress(true)
-        signInController.attemptSignIn().map {
-          case Left(error) =>
-            getContainer.enableProgress(false)
-            getContainer.showError(error)
-          case _ =>
-        } (Threading.Ui)
-      case R.id.ttv_signin_forgot_password =>
-        getContainer.onOpenUrl(getString(R.string.url_password_reset))
+  override def onClick(v: View): Unit = {
+    getContainer.enableProgress(true)
+    signInController.addEmail().map {
+      case Left(error) =>
+        getContainer.enableProgress(false)
+        getContainer.showError(error)
       case _ =>
-    }
-  }
-
-  override def onBackPressed() = {
-    ZMessaging.currentAccounts.removeCurrentAccount()
-    signInController.uiSignInState ! SignInMethod(Login, Phone)
-    true
+    } (Threading.Ui)
   }
 }
 
-object InsertPasswordFragment {
+object AddEmailFragment {
   val Tag = ZLog.ImplicitTag.implicitLogTag
-
-  def newInstance() = new InsertPasswordFragment()
   trait Container {
     def enableProgress(enabled: Boolean): Unit
-    def onOpenUrl(url: String): Unit
     def showError(entryError: EntryError, okCallback: => Unit = {}): Unit
   }
-  }
+}

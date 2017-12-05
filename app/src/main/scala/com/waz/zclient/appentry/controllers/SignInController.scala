@@ -23,8 +23,8 @@ import com.waz.api.Invitations.{EmailAddressResponse, PhoneNumberResponse}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.zclient.appentry.controllers.AppEntryController.InsertPasswordStage
 import com.waz.zclient.appentry.EntryError
+import com.waz.zclient.appentry.controllers.AppEntryController.InsertPasswordStage
 import com.waz.zclient.appentry.controllers.SignInController._
 import com.waz.zclient.newreg.fragments.country.{Country, CountryController}
 import com.waz.zclient.pages.main.profile.validator.{EmailValidator, NameValidator, PasswordValidator}
@@ -90,6 +90,11 @@ class SignInController(implicit inj: Injector, eventContext: EventContext, conte
     case _ => Signal.empty[Boolean]
   }
 
+  lazy val isAddEmailValid: Signal[Boolean] = for {
+      email <- email
+      password <- password
+    } yield emailValidator.validate(email) && passwordValidator.validate(password)
+
   def attemptSignIn(): Future[Either[EntryError, Unit]] = {
     implicit val ec = Threading.Ui
 
@@ -135,6 +140,15 @@ class SignInController(implicit inj: Injector, eventContext: EventContext, conte
     password ! ""
     name ! ""
     phone ! ""
+  }
+
+  def addEmail(): Future[Either[EntryError, Unit]] = {
+    implicit val ec = Threading.Background
+    for {
+      email    <- email.head
+      password <- password.head
+      response <- appEntryController.addEmail(email, password)
+    } yield response
   }
 }
 

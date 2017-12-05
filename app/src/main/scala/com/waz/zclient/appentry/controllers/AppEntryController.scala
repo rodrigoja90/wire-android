@@ -30,7 +30,7 @@ import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.zclient.appentry.controllers.AppEntryController._
 import com.waz.zclient.appentry.controllers.SignInController._
-import com.waz.zclient.appentry.{EntryError, GenericRegisterPhoneError}
+import com.waz.zclient.appentry.{EntryError, GenericRegisterEmailError, GenericRegisterPhoneError}
 import com.waz.zclient.newreg.fragments.SignUpPhotoFragment
 import com.waz.zclient.newreg.fragments.SignUpPhotoFragment.RegistrationType
 import com.waz.zclient.tracking._
@@ -52,6 +52,7 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
   val currentUser = optZms.flatMap{ _.fold(Signal.const(Option.empty[UserData]))(z => z.usersStorage.optSignal(z.selfUserId)) }
   val invitationToken = Signal(Option.empty[String])
   val firstStage = Signal[FirstStage](FirstScreen)
+  val clientCount = optZms.flatMap{ _.fold(Signal.const(0))(z => z.otrClientsStorage.optSignal(z.selfUserId).map(_.fold(0)(_.clients.size))) }
 
   val invitationDetails = for {
     Some(token) <- invitationToken
@@ -90,7 +91,8 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
     account <- currentAccount.orElse(Signal.const(None))
     user <- currentUser.orElse(Signal.const(None))
     firstPageState <- firstStage
-    state <- Signal.const(stateForAccountAndUser(account, user, firstPageState)).collect{ case s if s != Waiting => s }
+    clientCount <- clientCount
+    state <- Signal.const(stateForAccountAndUser(account, user, firstPageState, clientCount)).collect{ case s if s != Waiting => s }
   } yield state
 
   val autoConnectInvite = for {
@@ -113,7 +115,7 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
     case false =>
   }
 
-  def stateForAccountAndUser(account: Option[AccountData], user: Option[UserData], firstPageState: FirstStage): AppEntryStage = {
+  def stateForAccountAndUser(account: Option[AccountData], user: Option[UserData], firstPageState: FirstStage, clientCount: Int): AppEntryStage = {
     ZLog.verbose(s"Current account and user: $account $user")
     (account, user) match {
       case (None, _) =>
@@ -132,6 +134,8 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
         InsertPasswordStage
       case (Some(accountData), _) if accountData.clientRegState == ClientRegistrationState.LIMIT_REACHED =>
         DeviceLimitStage
+      case (Some(accountData), _) if accountData.email.isEmpty && accountData.pendingEmail.isEmpty && accountData.verified && clientCount >= 2 =>
+        AddEmailStage
       case (Some(accountData), _) if accountData.pendingEmail.isDefined && accountData.password.isDefined && !accountData.verified =>
         VerifyEmailStage
       case (Some(accountData), _) if accountData.regWaiting =>
@@ -304,6 +308,24 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
     }
   }
 
+  def addEmail(email: String, password: String): Future[Either[EntryError, Unit]] = {
+    optZms.head.flatMap {
+      case Some(zms) =>
+          zms.account.updateEmail(EmailAddress(email)).future.flatMap {
+            case Right(_) =>
+              zms.accounts.updateCurrentAccount(_.copy(pendingEmail = Some(EmailAddress(email)))).flatMap { _ =>
+                zms.account.updatePassword(password, None)
+              }
+            case err => Future.successful(err)
+          }.map {
+            case Left(error) => Left(EntryError(error.code, error.label, SignInMethod(Register, Email)))
+            case Right(_) => Right(())
+          }
+      case _ =>
+        Future.successful(Left(GenericRegisterEmailError))
+    }
+  }
+
   def gotToFirstPage(): Unit = firstStage ! FirstScreen
 
   def createTeam(): Unit = firstStage ! RegisterTeamScreen
@@ -385,6 +407,7 @@ object AppEntryController {
   object VerifyPhoneStage    extends AppEntryStage
   object AddHandleStage      extends AppEntryStage
   object InsertPasswordStage extends AppEntryStage
+  object AddEmailStage       extends AppEntryStage
 
   object SetTeamEmail            extends AppEntryStage { override val depth = 2 }
   object VerifyTeamEmail         extends AppEntryStage { override val depth = 3 }
