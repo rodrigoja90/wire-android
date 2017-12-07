@@ -32,6 +32,7 @@ import com.waz.utils.events.{EventContext, Signal, Subscription}
 import com.waz.zclient.api.scala.ScalaStoreFactory
 import com.waz.zclient.appentry.controllers.{AppEntryController, SignInController}
 import com.waz.zclient.calling.controllers.{CallPermissionsController, CurrentCallController, GlobalCallingController}
+import com.waz.zclient.callquality.CallQualityController
 import com.waz.zclient.camera.controllers.{AndroidCameraFactory, GlobalCameraController}
 import com.waz.zclient.collection.controllers.CollectionController
 import com.waz.zclient.common.controllers.{SoundController, _}
@@ -128,6 +129,7 @@ object WireApplication {
     bind [NavigationController]      to new NavigationController()
     bind [AppEntryController]        to new AppEntryController()
     bind [SignInController]          to new SignInController()
+    bind [CallQualityController]     to new CallQualityController()
 
 
     // current conversation data
