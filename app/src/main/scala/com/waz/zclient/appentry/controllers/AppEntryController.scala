@@ -314,7 +314,7 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
           zms.account.updateEmail(EmailAddress(email)).future.flatMap {
             case Right(_) =>
               zms.accounts.updateCurrentAccount(_.copy(pendingEmail = Some(EmailAddress(email)))).flatMap { _ =>
-                zms.account.updatePassword(password, None)
+                zms.account.updatePassword(newPassword = password, currentPassword = None)
               }
             case err => Future.successful(err)
           }.map {

@@ -385,19 +385,19 @@ class AppEntryActivity extends BaseActivity
       false)
 
   def onShowSetUsername(): Unit = {
-    val transaction: FragmentTransaction = getSupportFragmentManager.beginTransaction
+    val transaction = getSupportFragmentManager.beginTransaction
     setDefaultAnimation(transaction).replace(R.id.fl_main_content, FirstTimeAssignUsernameFragment.newInstance("", ""), FirstTimeAssignUsernameFragment.TAG).commit
     enableProgress(false)
   }
 
   def onShowInsertPassword(): Unit = {
-    val transaction: FragmentTransaction = getSupportFragmentManager.beginTransaction
+    val transaction = getSupportFragmentManager.beginTransaction
     setDefaultAnimation(transaction).replace(R.id.fl_main_content, InsertPasswordFragment.newInstance(), InsertPasswordFragment.Tag).commit
     enableProgress(false)
   }
 
   def onShowAddEmail(): Unit = {
-    val transaction: FragmentTransaction = getSupportFragmentManager.beginTransaction
+    val transaction = getSupportFragmentManager.beginTransaction
     setDefaultAnimation(transaction).replace(R.id.fl_main_content, new AddEmailFragment(), AddEmailFragment.Tag).commit
     enableProgress(false)
   }

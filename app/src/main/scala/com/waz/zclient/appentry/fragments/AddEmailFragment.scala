@@ -19,7 +19,6 @@ package com.waz.zclient.appentry.fragments
 
 import android.graphics.Color
 import android.os.Bundle
-import android.view.View.OnClickListener
 import android.view.{LayoutInflater, View, ViewGroup}
 import com.waz.ZLog
 import com.waz.zclient.appentry.controllers.SignInController
@@ -34,17 +33,21 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.threading.Threading
 import com.waz.zclient.appentry.EntryError
 import com.waz.zclient.appentry.controllers.SignInController.{Email, Register, SignInMethod}
+import com.waz.zclient.utils.RichView
 
-class AddEmailFragment extends BaseFragment[Container] with FragmentHelper with OnClickListener {
+class AddEmailFragment extends BaseFragment[Container] with FragmentHelper {
 
   lazy val signInController = inject[SignInController]
-
-  lazy val confirmationButton = Option(findById[PhoneConfirmationButton](R.id.confirmation_button))
 
   override def onCreateView(inflater: LayoutInflater, container: ViewGroup, savedInstanceState: Bundle): View =
     inflater.inflate(R.layout.add_email_fragment, container, false)
 
   override def onViewCreated(view: View, savedInstanceState: Bundle) = {
+    val confirmationButton = Option(findById[PhoneConfirmationButton](R.id.confirmation_button))
+
+    def setConfirmationButtonActive(active: Boolean): Unit =
+      confirmationButton.foreach(_.setState(if(active) CONFIRM else NONE))
+
     signInController.uiSignInState ! SignInMethod(Register, Email)
 
     Option(findById[GuidedEditText](getView, R.id.email_field)).foreach { field =>
@@ -61,27 +64,20 @@ class AddEmailFragment extends BaseFragment[Container] with FragmentHelper with 
     }
 
     confirmationButton.foreach { button =>
-      button.setOnClickListener(this)
+      button.onClick {
+        getContainer.enableProgress(true)
+        signInController.addEmail().map {
+          case Left(error) =>
+            getContainer.enableProgress(false)
+            getContainer.showError(error)
+          case _ =>
+        } (Threading.Ui)
+      }
       button.setAccentColor(Color.WHITE)
     }
 
     setConfirmationButtonActive(signInController.isValid.currentValue.getOrElse(false))
     signInController.isAddEmailValid.onUi { setConfirmationButtonActive }
-    Option(findById[View](R.id.cancel_button)).foreach(_.setOnClickListener(this))
-    Option(findById[View](R.id.ttv_signin_forgot_password)).foreach(_.setOnClickListener(this))
-  }
-
-  private def setConfirmationButtonActive(active: Boolean): Unit =
-    confirmationButton.foreach(_.setState(if(active) CONFIRM else NONE))
-
-  override def onClick(v: View): Unit = {
-    getContainer.enableProgress(true)
-    signInController.addEmail().map {
-      case Left(error) =>
-        getContainer.enableProgress(false)
-        getContainer.showError(error)
-      case _ =>
-    } (Threading.Ui)
   }
 }
 
