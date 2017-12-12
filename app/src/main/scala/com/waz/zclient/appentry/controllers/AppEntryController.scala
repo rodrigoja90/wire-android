@@ -52,7 +52,10 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
   val currentUser = optZms.flatMap{ _.fold(Signal.const(Option.empty[UserData]))(z => z.usersStorage.optSignal(z.selfUserId)) }
   val invitationToken = Signal(Option.empty[String])
   val firstStage = Signal[FirstStage](FirstScreen)
-  val clientCount = optZms.flatMap{ _.fold(Signal.const(0))(z => z.otrClientsStorage.optSignal(z.selfUserId).map(_.fold(0)(_.clients.size))) }
+  val clientCount = ZMessaging.currentAccounts.activeAccountManager.flatMap {
+    case Some(am) => am.userModule.flatMap(um => um.clientsStorage.optSignal(um.userId).map(_.fold(0)(_.clients.size)))
+    case _ => Signal.const(0)
+  }.orElse(Signal.const(0))
 
   val invitationDetails = for {
     Some(token) <- invitationToken
@@ -309,18 +312,18 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
   }
 
   def addEmail(email: String, password: String): Future[Either[EntryError, Unit]] = {
-    optZms.head.flatMap {
-      case Some(zms) =>
-          zms.account.updateEmail(EmailAddress(email)).future.flatMap {
-            case Right(_) =>
-              zms.accounts.updateCurrentAccount(_.copy(pendingEmail = Some(EmailAddress(email)))).flatMap { _ =>
-                zms.account.updatePassword(newPassword = password, currentPassword = None)
-              }
-            case err => Future.successful(err)
-          }.map {
-            case Left(error) => Left(EntryError(error.code, error.label, SignInMethod(Register, Email)))
-            case Right(_) => Right(())
-          }
+    ZMessaging.currentAccounts.activeAccountManager.head.flatMap {
+      case Some(accountManager) =>
+        accountManager.updateEmail(EmailAddress(email)).future.flatMap {
+          case Right(_) =>
+            ZMessaging.currentAccounts.updateCurrentAccount(_.copy(pendingEmail = Some(EmailAddress(email)))).flatMap { _ =>
+              accountManager.updatePassword(newPassword = password, currentPassword = None)
+            }
+          case err => Future.successful(err)
+        }.map {
+          case Left(error) => Left(EntryError(error.code, error.label, SignInMethod(Register, Email)))
+          case Right(_) => Right(())
+        }
       case _ =>
         Future.successful(Left(GenericRegisterEmailError))
     }
