@@ -24,7 +24,8 @@ import android.widget.TextView
 import com.waz.zclient.appentry.controllers.AppEntryController
 import com.waz.zclient.pages.BaseFragment
 import com.waz.zclient.ui.utils.{KeyboardUtils, TextViewUtils}
-import com.waz.zclient.{FragmentHelper, R}
+import com.waz.zclient.{FragmentHelper, OnBackPressedListener, R}
+import com.waz.zclient.utils.RichView
 
 object EmailVerifyEmailFragment {
   val TAG: String = classOf[EmailVerifyEmailFragment].getName
@@ -35,7 +36,7 @@ object EmailVerifyEmailFragment {
 
 }
 
-class EmailVerifyEmailFragment extends BaseFragment[EmailVerifyEmailFragment.Container] with FragmentHelper with View.OnClickListener {
+class EmailVerifyEmailFragment extends BaseFragment[EmailVerifyEmailFragment.Container] with FragmentHelper with View.OnClickListener with OnBackPressedListener {
   private lazy val resendTextView = findById[TextView](getView, R.id.ttv__pending_email__resend)
   private lazy val checkEmailTextView = findById[TextView](getView, R.id.ttv__sign_up__check_email)
   private lazy val didntGetEmailTextView = findById[TextView](getView, R.id.ttv__sign_up__didnt_get)
@@ -51,6 +52,9 @@ class EmailVerifyEmailFragment extends BaseFragment[EmailVerifyEmailFragment.Con
     appEntryController.currentAccount.map(_.flatMap(acc => acc.pendingEmail.orElse(acc.email))).onUi {
       case Some(email) => setEmailText(email.str)
       case _ => setEmailText("")
+    }
+    appEntryController.currentAccount.map(_.flatMap(_.cookie)).onUi { cookie =>
+      backButton.setVisible(cookie.isEmpty)
     }
   }
 
@@ -90,4 +94,6 @@ class EmailVerifyEmailFragment extends BaseFragment[EmailVerifyEmailFragment.Con
         appEntryController.resendActivationEmail()
     }
   }
+
+  override def onBackPressed(): Boolean = true
 }

@@ -139,7 +139,7 @@ class AppEntryController(implicit inj: Injector, eventContext: EventContext) ext
         AddEmailStage
       case (Some(accountData), _) if accountData.clientRegState == ClientRegistrationState.LIMIT_REACHED =>
         DeviceLimitStage
-      case (Some(accountData), _) if accountData.pendingEmail.isDefined && accountData.password.isDefined && !accountData.verified =>
+      case (Some(accountData), _) if accountData.pendingEmail.isDefined && (accountData.password.isDefined || accountData.cookie.isDefined) && accountData.email.isEmpty =>
         VerifyEmailStage
       case (Some(accountData), _) if accountData.regWaiting =>
         AddNameStage
