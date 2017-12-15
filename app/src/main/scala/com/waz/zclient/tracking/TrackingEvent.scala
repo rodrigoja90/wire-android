@@ -219,3 +219,12 @@ case class OpenedManageTeam() extends TrackingEvent {
   override val name: String = "settings.opened_manage_team"
   override val props = None
 }
+
+//TODO: get metrics json from avs
+case class AvsMetrics(callSetupQuality: Int, callQuality: Int) extends TrackingEvent {
+  override val name: String = "calling.avs_metrics_ended_call"
+  override val props: Option[JSONObject] = Some(returning(new JSONObject()) { o =>
+    o.put("score1", callSetupQuality)
+    o.put("score2", callQuality)
+  })
+}
