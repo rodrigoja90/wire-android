@@ -29,10 +29,10 @@ import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
-import com.waz.zclient.conversation.ConversationController
 import com.waz.zclient.common.controllers.UserAccountsController
 import com.waz.zclient.common.controllers.global.AccentColorController
 import com.waz.zclient.conversationlist.views.{ArchiveTopToolbar, ConversationListTopToolbar, NormalTopToolbar}
+import com.waz.zclient.conversation.ConversationController
 import com.waz.zclient.core.stores.conversation.ConversationChangeRequester
 import com.waz.zclient.pages.BaseFragment
 import com.waz.zclient.pages.main.conversation.controller.IConversationScreenController
@@ -45,10 +45,9 @@ import com.waz.zclient.preferences.PreferencesActivity
 import com.waz.zclient.ui.text.TypefaceTextView
 import com.waz.zclient.utils.ContextUtils._
 import com.waz.zclient.utils.{RichView, ViewUtils}
-
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-
+import com.waz.zclient.messages.UsersController
 import com.waz.zclient.{FragmentHelper, OnBackPressedListener, R}
 
 abstract class ConversationListFragment extends BaseFragment[ConversationListFragment.Container] with FragmentHelper {
@@ -58,6 +57,7 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
   val layoutId: Int
   lazy val userAccountsController = inject[UserAccountsController]
   lazy val conversationController = inject[ConversationController]
+  lazy val usersController        = inject [UsersController]
 
   override def onCreateView(inflater: LayoutInflater, container: ViewGroup, savedInstanceState: Bundle) =
     inflater.inflate(layoutId, container, false)
@@ -67,8 +67,11 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
 
     val adapter = returning(new ConversationListAdapter(getContext)) { a =>
       a.setMaxAlpha(getResourceFloat(R.dimen.list__swipe_max_alpha))
-      a.currentMode.on(Threading.Ui) { mode =>
-        topToolbar.title.setText(mode.nameId)
+      (for {
+        mode <- a.currentMode
+        user <- userAccountsController.currentUser
+      } yield (mode, user)).on(Threading.Ui) {
+        case (mode,user) => topToolbar.setTitle(mode, user)
       }
     }
 
@@ -83,6 +86,7 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
         }
       })
     }
+
     userAccountsController.currentUser.on(Threading.Ui) { _ =>
       conversationListView.scrollToPosition(0)
     }
@@ -96,7 +100,6 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
   def init(view: View, adapter: ConversationListAdapter): Unit
 
   private def handleItemClick(conversationData: ConversationData): Unit = {
-    import Threading.Implicits.Background
     verbose(s"handleItemClick, switching conv to ${conversationData.id}")
     conversationController.selectConv(Option(conversationData.id), ConversationChangeRequester.CONVERSATION_LIST)
   }
@@ -105,18 +108,15 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
     if (conversationData.convType != ConversationType.Group &&
         conversationData.convType != ConversationType.OneToOne &&
         conversationData.convType != ConversationType.WaitForConnection) {
-      return
-    }
-
-    getControllerFactory.getConversationScreenController.showConversationMenu(IConversationScreenController.CONVERSATION_LIST_LONG_PRESS, conversationData.id, anchorView)
+    } else
+      getControllerFactory.getConversationScreenController.showConversationMenu(IConversationScreenController.CONVERSATION_LIST_LONG_PRESS, conversationData.id, anchorView)
   }
 
   override def onCreateAnimation(transit: Int, enter: Boolean, nextAnim: Int): Animation = {
     if (nextAnim == 0 || getContainer == null || getControllerFactory.isTornDown)
-      return super.onCreateAnimation(transit, enter, nextAnim)
-
-    if (getControllerFactory.getPickUserController.isHideWithoutAnimations)
-      return new ConversationListAnimation(
+      super.onCreateAnimation(transit, enter, nextAnim)
+    else if (getControllerFactory.getPickUserController.isHideWithoutAnimations)
+      new ConversationListAnimation(
         0,
         getResources.getDimensionPixelSize(R.dimen.open_new_conversation__thread_list__max_top_distance),
         enter,
@@ -124,9 +124,8 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
         0,
         false,
         1f)
-
-    if (enter)
-      return new ConversationListAnimation(
+    else if (enter)
+      new ConversationListAnimation(
         0,
         getResources.getDimensionPixelSize(R.dimen.open_new_conversation__thread_list__max_top_distance),
         enter,
@@ -134,8 +133,7 @@ abstract class ConversationListFragment extends BaseFragment[ConversationListFra
         getResources.getInteger(R.integer.framework_animation_duration_medium),
         false,
         1f)
-
-    new ConversationListAnimation(
+    else new ConversationListAnimation(
       0,
       getResources.getDimensionPixelSize(R.dimen.open_new_conversation__thread_list__max_top_distance),
       enter,

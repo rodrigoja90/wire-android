@@ -23,19 +23,21 @@ import android.view.View
 import android.view.View.OnClickListener
 import android.widget.{FrameLayout, ImageView}
 import com.waz.ZLog
+import com.waz.model.{Availability, UserData}
 import com.waz.service.ZMessaging
 import com.waz.utils.NameParts
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.zclient.common.controllers.UserAccountsController
 import com.waz.zclient.common.views.GlyphButton
-import com.waz.zclient.conversationlist.ListSeparatorDrawable
+import com.waz.zclient.conversationlist.{ConversationListAdapter, ListSeparatorDrawable}
 import com.waz.zclient.drawables.TeamIconDrawable
+import com.waz.zclient.tracking.AvailabilityChanged
 import com.waz.zclient.ui.text.TypefaceTextView
 import com.waz.zclient.ui.views.CircleView
 import com.waz.zclient.utils.ContextUtils._
 import com.waz.zclient.utils.{RichView, UiStorage, UserSignal}
+import com.waz.zclient.views.AvailabilityView
 import com.waz.zclient.{R, ViewHelper}
-
 
 abstract class ConversationListTopToolbar(val context: Context, val attrs: AttributeSet, val defStyleAttr: Int) extends FrameLayout(context, attrs, defStyleAttr) with ViewHelper {
 
@@ -60,21 +62,32 @@ abstract class ConversationListTopToolbar(val context: Context, val attrs: Attri
   bottomBorder.setBackground(separatorDrawable)
 
   buttonContainer.setOnClickListener(new OnClickListener {
-    override def onClick(v: View) = {
-      onRightButtonClick ! v
-    }
+    override def onClick(v: View) = onRightButtonClick ! v
   })
 
-  def setScrolledToTop(scrolledToTop: Boolean): Unit = {
-    if (this.scrolledToTop == scrolledToTop) {
-      return
+  def setScrolledToTop(scrolledToTop: Boolean): Unit =
+    if (this.scrolledToTop != scrolledToTop) {
+      this.scrolledToTop = scrolledToTop
+      if (!scrolledToTop) {
+        separatorDrawable.animateCollapse()
+      } else {
+        separatorDrawable.animateExpand()
+      }
     }
-    this.scrolledToTop = scrolledToTop
-    if (!scrolledToTop) {
-      separatorDrawable.animateCollapse()
-    } else {
-      separatorDrawable.animateExpand()
-    }
+
+  def setTitle(mode: ConversationListAdapter.ListMode, currentUser: Option[UserData]): Unit = (mode, currentUser) match {
+    case (ConversationListAdapter.Normal, Some(user)) if user.teamId.nonEmpty =>
+      title.setText(user.displayName)
+      AvailabilityView.displayLeftOfText(title, user.availability, title.getCurrentTextColor)
+      title.onClick { AvailabilityView.showAvailabilityMenu(AvailabilityChanged.ListHeader) }
+    case (ConversationListAdapter.Normal, Some(user)) =>
+      title.setText(user.displayName)
+      AvailabilityView.displayLeftOfText(title, Availability.None, title.getCurrentTextColor)
+      title.setOnClickListener(null)
+    case (mode, userOpt) =>
+      title.setText(mode.nameId)
+      AvailabilityView.displayLeftOfText(title, Availability.None, title.getCurrentTextColor)
+      title.setOnClickListener(null)
   }
 
 }
@@ -111,20 +124,16 @@ class NormalTopToolbar(override val context: Context, override val attrs: Attrib
   separatorDrawable.setMinMax(0f, 1.0f)
   separatorDrawable.setClip(1.0f)
 
-  override def setScrolledToTop(scrolledToTop: Boolean): Unit = {
-    if (this.scrolledToTop == scrolledToTop) {
-      return
+  override def setScrolledToTop(scrolledToTop: Boolean): Unit =
+    if (this.scrolledToTop != scrolledToTop) {
+      super.setScrolledToTop(scrolledToTop)
     }
-    super.setScrolledToTop(scrolledToTop)
-  }
 
-  def setIndicatorVisible(visible: Boolean): Unit = {
+  def setIndicatorVisible(visible: Boolean): Unit =
     settingsIndicator.setVisible(visible)
-  }
 
-  def setIndicatorColor(color: Int): Unit = {
+  def setIndicatorColor(color: Int): Unit =
     settingsIndicator.setAccentColor(color)
-  }
 
   def setLoading(loading: Boolean): Unit =
     profileButton.setImageDrawable(if (loading) getDrawable(R.drawable.list_row_chathead_loading) else drawable)

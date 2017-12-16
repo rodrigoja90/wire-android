@@ -27,31 +27,34 @@ import com.waz.model.{Contact, UserData}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
+import com.waz.zclient.usersearch.views.ContactListItemTextView._
+import com.waz.zclient.utils.ContextUtils._
 import com.waz.zclient.utils.StringUtils
 import com.waz.zclient.{Injectable, R, ViewHelper}
 import ContactListItemTextView._
+import com.waz.zclient.messages.UsersController
+import com.waz.zclient.views.AvailabilityView
+
 
 object ContactListItemTextView {
   private val SEPARATOR_SYMBOL: String = " · "
 
   def getFormattedSubLabel(name: String, userHandle: String, addressBookName: String, showContactDetails: Boolean)(implicit context: Context): String = {
     val usernameString = StringUtils.formatHandle(userHandle)
-    var otherString: String = ""
-    if (addressBookName.nonEmpty && showContactDetails) {
-      if (name.equalsIgnoreCase(addressBookName)) {
-        otherString = context.getString(R.string.people_picker__contact_list_contact_sub_label_address_book_identical)
-      }
-      else {
-        otherString = context.getString(R.string.people_picker__contact_list_contact_sub_label_address_book, addressBookName)
-      }
-    }
-    if (TextUtils.isEmpty(userHandle)) {
-      return otherString
-    }
-    else if (TextUtils.isEmpty(otherString)) {
-      return usernameString
-    }
-    usernameString + ContactListItemTextView.SEPARATOR_SYMBOL + otherString
+    val otherString =
+      if (addressBookName.nonEmpty && showContactDetails) {
+        if (name.equalsIgnoreCase(addressBookName))
+          getString(R.string.people_picker__contact_list_contact_sub_label_address_book_identical)
+        else
+          getString(R.string.people_picker__contact_list_contact_sub_label_address_book, addressBookName)
+      } else ""
+
+    if (TextUtils.isEmpty(userHandle))
+      otherString
+    else if (TextUtils.isEmpty(otherString))
+      usernameString
+    else
+      usernameString + ContactListItemTextView.SEPARATOR_SYMBOL + otherString
   }
 
   def getFormattedSubLabel(userData: UserData, contact: Option[Contact], showContactDetails: Boolean)(implicit context: Context): String = {
@@ -75,6 +78,7 @@ class ContactListItemTextView(val context: Context, val attrs: AttributeSet, val
 
   val zms = inject[Signal[ZMessaging]]
   val userDataSignal = Signal[UserData]
+  lazy val usersController = inject[UsersController]
   val showContactDetailsSignal = Signal[Boolean]
   val userDetails = for {
     z <- zms
@@ -108,6 +112,9 @@ class ContactListItemTextView(val context: Context, val attrs: AttributeSet, val
         subLabelView.setText(sublabel)
       }
       nameView.setText(userData.getDisplayName)
+      usersController.availability(userData.id).head.foreach { av =>
+        AvailabilityView.displayLeftOfText(nameView, av, nameView.getCurrentTextColor)
+      }(Threading.Ui)
     } { contact =>
       nameView.setGravity(Gravity.START | Gravity.CENTER_VERTICAL)
       nameView.setText(contact.name)
@@ -136,6 +143,7 @@ class ContactListItemTextView(val context: Context, val attrs: AttributeSet, val
 
   def recycle(): Unit = {
     nameView.setText("")
+    AvailabilityView.hideAvailabilityIcon(nameView)
     subLabelView.setText("")
     subLabelView.setVisibility(View.GONE)
   }

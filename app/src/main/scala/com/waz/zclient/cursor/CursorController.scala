@@ -46,6 +46,7 @@ import com.waz.zclient.utils.LayoutSpec
 import com.waz.zclient.ui.cursor.{CursorMenuItem => JCursorMenuItem}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.zclient.conversation.ConversationController
+import com.waz.zclient.conversationlist.ConversationListController
 
 import concurrent.duration._
 
@@ -55,6 +56,7 @@ class CursorController(implicit inj: Injector, ctx: Context, evc: EventContext) 
 
   val zms = inject[Signal[ZMessaging]]
   val conversationController = inject[ConversationController]
+  lazy val convListController = inject[ConversationListController]
   val conv = conversationController.currentConv
 
   val keyboard = Signal[KeyboardState](KeyboardState.Hidden)
@@ -80,6 +82,10 @@ class CursorController(implicit inj: Injector, ctx: Context, evc: EventContext) 
   val ephemeralSelected = extendedCursor.map(_ == ExtendedCursorContainer.Type.EPHEMERAL)
   val emojiKeyboardVisible = extendedCursor.map(_ == ExtendedCursorContainer.Type.EMOJIS)
   val convIsEphemeral = conv.map(_.ephemeral != EphemeralExpiration.NONE)
+  val convAvailability = for {
+    convId <- conv.map(_.id)
+    av <- convListController.availability(convId)
+  } yield av
 
   val convIsActive = conv.map(_.isActive)
   val isEphemeralMode = convIsEphemeral.zip(ephemeralSelected) map { case (ephConv, selected) => ephConv || selected }
@@ -148,10 +154,8 @@ class CursorController(implicit inj: Injector, ctx: Context, evc: EventContext) 
       if (LayoutSpec.isTablet(ctx) && tpe == ExtendedCursorContainer.Type.IMAGES) {
         cameraController.openCamera(CameraContext.MESSAGE)
         keyboard ! KeyboardState.Hidden
-      } else {
-        permissions.withPermissions(keyboardPermissions(tpe): _*) {
-          cursorCallback.foreach(_.openExtendedCursor(tpe))
-        }
+      } else permissions.withPermissions(keyboardPermissions(tpe): _*) {
+        cursorCallback.foreach(_.openExtendedCursor(tpe))
       }
   }
 
@@ -163,22 +167,22 @@ class CursorController(implicit inj: Injector, ctx: Context, evc: EventContext) 
   def submit(msg: String): Boolean = {
     if (isEditingMessage.currentValue.contains(true)) {
       onApproveEditMessage()
-      return true
+      true
     }
-    if (TextUtils.isEmpty(msg.trim)) return false
-
-    for {
-      cId <- conversationController.currentConvId.head
-      cs <- zms.head.map(_.convsUi)
-      m <- cs.sendMessage(cId, new MessageContent.Text(msg))
-    } {
-      m foreach { msg =>
-        onMessageSent ! msg
-        cursorCallback.foreach(_.onMessageSent(msg))
+    else if (TextUtils.isEmpty(msg.trim)) false
+    else {
+      for {
+        cId <- conversationController.currentConvId.head
+        cs <- zms.head.map(_.convsUi)
+        m <- cs.sendMessage(cId, new MessageContent.Text(msg))
+      } {
+        m foreach { msg =>
+          onMessageSent ! msg
+          cursorCallback.foreach(_.onMessageSent(msg))
+        }
       }
+      true
     }
-
-    true
   }
 
   def onApproveEditMessage(): Unit =

@@ -23,12 +23,14 @@ import android.util.AttributeSet
 import android.view.View
 import android.widget.LinearLayout
 import com.waz.api.User
-import com.waz.model.UserId
+import com.waz.model.{Availability, UserId}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
+import com.waz.zclient.messages.UsersController
 import com.waz.zclient.ui.text.TypefaceTextView
 import com.waz.zclient.utils.UiStorage
+import com.waz.zclient.views.ShowAvailabilityView
 import com.waz.zclient.views.images.ImageAssetImageView
 import com.waz.zclient.views.menus.{FooterMenu, FooterMenuCallback}
 import com.waz.zclient.{R, ViewHelper}
@@ -40,9 +42,12 @@ class ParticipantDetailsTab(val context: Context, val attrs: AttributeSet, val d
   inflate(R.layout.single_participant_tab_details)
 
   private implicit val uiStorage = inject[UiStorage]
+  private lazy val usersController = inject[UsersController]
+
   private val imageAssetImageView = findById[ImageAssetImageView ](R.id.iaiv__single_participant)
   private val footerMenu = findById[FooterMenu](R.id.fm__footer)
   private val guestIndicationText = findById[TypefaceTextView](R.id.participant_guest_indicator)
+  private lazy val userAvailability = findById[ShowAvailabilityView](R.id.participant_availability)
 
   imageAssetImageView.setDisplayType(ImageAssetImageView.DisplayType.CIRCLE)
   setOrientation(LinearLayout.VERTICAL)
@@ -64,6 +69,15 @@ class ParticipantDetailsTab(val context: Context, val attrs: AttributeSet, val d
       guestIndicationText.setText("")
   }
 
+  private val avStatus = usersController.availabilityVisible.zip(userId.flatMap(usersController.availability))
+
+  avStatus.on(Threading.Ui) {
+    case (false, _) => userAvailability.setVisibility(View.GONE)
+    case (true, av) =>
+      userAvailability.setVisibility(View.VISIBLE)
+      userAvailability.set(av)
+  }
+
   def setUser(user: User): Unit = {
     Option(user).fold{
       imageAssetImageView.resetBackground()
@@ -73,14 +87,12 @@ class ParticipantDetailsTab(val context: Context, val attrs: AttributeSet, val d
     userId ! UserId(user.getId)
   }
 
-  def updateFooterMenu(@StringRes leftAction: Int, @StringRes leftActionLabel: Int, @StringRes rightAction: Int, @StringRes rightActionLabel: Int, callback: FooterMenuCallback): Unit = {
-    if (footerMenu == null) {
-      return
+  def updateFooterMenu(@StringRes leftAction: Int, @StringRes leftActionLabel: Int, @StringRes rightAction: Int, @StringRes rightActionLabel: Int, callback: FooterMenuCallback): Unit =
+    Option(footerMenu).foreach { v =>
+      v.setLeftActionText(getContext.getString(leftAction))
+      v.setLeftActionLabelText(getContext.getString(leftActionLabel))
+      v.setRightActionText(getContext.getString(rightAction))
+      v.setRightActionLabelText(getContext.getString(rightActionLabel))
+      v.setCallback(callback)
     }
-    footerMenu.setLeftActionText(getContext.getString(leftAction))
-    footerMenu.setLeftActionLabelText(getContext.getString(leftActionLabel))
-    footerMenu.setRightActionText(getContext.getString(rightAction))
-    footerMenu.setRightActionLabelText(getContext.getString(rightActionLabel))
-    footerMenu.setCallback(callback)
-  }
 }
